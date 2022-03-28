@@ -10,6 +10,7 @@
         <module>deliveryman-service-manager</module>
         <module>settlement-service-manager</module>
         <module>reward-service-manager</module>
+        <module>common-module</module>
     </modules>
     <parent>
         <groupId>org.springframework.boot</groupId>

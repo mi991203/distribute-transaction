@@ -11,12 +11,14 @@
         <module name="settlement-service-manager" />
         <module name="reward-service-manager" />
         <module name="restaurant-service-manager" />
+        <module name="common-module" />
         <module name="deliveryman-service-manager" />
       </profile>
     </annotationProcessing>
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="common-module" options="-parameters" />
       <module name="deliveryman-service-manager" options="-parameters" />
       <module name="order-service-manager" options="-parameters" />
       <module name="restaurant-service-manager" options="-parameters" />
