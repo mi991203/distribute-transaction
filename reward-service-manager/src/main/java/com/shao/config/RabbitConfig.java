@@ -1,6 +1,9 @@
 package com.shao.config;
 
+import com.shao.mq.RewardExecuteMsg;
 import org.springframework.amqp.core.*;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -35,5 +38,19 @@ public class RabbitConfig {
     @Bean
     public Binding rewardBinding() {
         return new Binding(rewardQueue, Binding.DestinationType.QUEUE, rewardExchange, rewardKey, null);
+    }
+
+    @Bean
+    public SimpleMessageListenerContainer simpleMessageListenerContainer(ConnectionFactory connectionFactory,
+                                                                         RewardExecuteMsg rewardExecuteMsg) {
+        final SimpleMessageListenerContainer container = new SimpleMessageListenerContainer();
+        container.setExposeListenerChannel(true);
+        container.setConnectionFactory(connectionFactory);
+        container.setAcknowledgeMode(AcknowledgeMode.MANUAL);
+        container.setQueueNames("queue.reward");
+        container.setConcurrentConsumers(1);
+        container.setMaxConcurrentConsumers(10);
+        container.setMessageListener(rewardExecuteMsg);
+        return container;
     }
 }

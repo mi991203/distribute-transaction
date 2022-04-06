@@ -1,7 +1,11 @@
 package com.shao.config;
 
+import com.shao.mq.RestaurantExecuteMsg;
+import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -28,6 +32,20 @@ public class RabbitConfig {
     @Qualifier("restaurantBinding")
     public Binding restaurantBinding() {
         return new Binding(restaurantQueue, Binding.DestinationType.QUEUE, restaurantExchange, restaurantKey, null);
+    }
+
+    @Bean
+    public SimpleMessageListenerContainer simpleMessageListenerContainer(ConnectionFactory connectionFactory,
+                                                                         RestaurantExecuteMsg restaurantExecuteMsg) {
+        final SimpleMessageListenerContainer container = new SimpleMessageListenerContainer();
+        container.setQueueNames("queue.restaurant");
+        container.setExposeListenerChannel(true);
+        container.setAcknowledgeMode(AcknowledgeMode.MANUAL);
+        container.setMessageListener(restaurantExecuteMsg);
+        container.setConcurrentConsumers(1);
+        container.setMaxConcurrentConsumers(10);
+        container.setConnectionFactory(connectionFactory);
+        return container;
     }
 
 }

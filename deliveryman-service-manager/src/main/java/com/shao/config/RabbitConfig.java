@@ -1,9 +1,9 @@
 package com.shao.config;
 
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.core.DirectExchange;
-import org.springframework.amqp.core.Exchange;
-import org.springframework.amqp.core.Queue;
+import com.shao.mq.DeliverymanExecuteMsg;
+import org.springframework.amqp.core.*;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -41,5 +41,19 @@ public class RabbitConfig {
     @Qualifier("deliveryBinding")
     public Binding deliveryBinding() {
         return new Binding(deliveryQueue, Binding.DestinationType.QUEUE, deliveryExchange, deliveryKey, null);
+    }
+
+    @Bean
+    public SimpleMessageListenerContainer simpleMessageListenerContainer(ConnectionFactory connectionFactory,
+                                                                         DeliverymanExecuteMsg deliverymanExecuteMsg) {
+        final SimpleMessageListenerContainer simpleMessageListenerContainer = new SimpleMessageListenerContainer();
+        simpleMessageListenerContainer.setConnectionFactory(connectionFactory);
+        simpleMessageListenerContainer.setQueueNames("queue.deliveryman");
+        simpleMessageListenerContainer.setExposeListenerChannel(true);
+        simpleMessageListenerContainer.setAcknowledgeMode(AcknowledgeMode.MANUAL);
+        simpleMessageListenerContainer.setMessageListener(deliverymanExecuteMsg);
+        simpleMessageListenerContainer.setConcurrentConsumers(1);
+        simpleMessageListenerContainer.setMaxConcurrentConsumers(10);
+        return simpleMessageListenerContainer;
     }
 }

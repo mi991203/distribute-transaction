@@ -1,5 +1,6 @@
 package com.shao.config;
 
+import com.shao.service.TransactionMsgService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -14,6 +15,9 @@ public class RabbitMqReturnConfig implements RabbitTemplate.ReturnCallback {
     @Autowired
     private RabbitTemplate rabbitTemplate;
 
+    @Autowired
+    private TransactionMsgService transactionMsgService;
+
     @PostConstruct
     public void init() {
         rabbitTemplate.setReturnCallback(this);
@@ -23,5 +27,6 @@ public class RabbitMqReturnConfig implements RabbitTemplate.ReturnCallback {
     public void returnedMessage(Message message, int replyCode, String replyText, String exchange, String routingKey) {
         log.error("消息无法被RabbitMq路由，message={}, replyCode={}, replyText={}, exchange={}, routingKey={}",
                 message, replyCode, replyText, exchange, routingKey);
+        transactionMsgService.messageSendReturn(message.getMessageProperties().getMessageId(), exchange, routingKey, new String(message.getBody()));
     }
 }

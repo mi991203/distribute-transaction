@@ -1,28 +1,23 @@
 package com.shao.mq;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rabbitmq.client.Channel;
 import com.shao.dao.OrderDetailDao;
 import com.shao.dto.OrderMessageDTO;
 import com.shao.enummeration.OrderStatus;
+import com.shao.listener.AbstractMessageListener;
 import com.shao.po.OrderDetailPO;
+import com.shao.sender.TransactionMsgSender;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
-import org.springframework.amqp.core.MessageProperties;
-import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.rabbit.support.CorrelationData;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
-import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 
 @Slf4j
 @Component
-public class OrderMessageService {
+public class OrderMessageService extends AbstractMessageListener {
     @Value("${rabbitmq.deliveryman.exchange}")
     private String deliverymanExchange;
 
@@ -45,16 +40,15 @@ public class OrderMessageService {
     private OrderDetailDao orderDetailDao;
 
     @Autowired
-    private RabbitTemplate rabbitTemplate;
+    private TransactionMsgSender transactionMsgSender;
 
     ObjectMapper objectMapper = new ObjectMapper();
 
-    @RabbitListener(queues = "queue.order")
-    public void handleMessage(Channel channel, @Payload Message message) {
-        String messageBody = new String(message.getBody());
-        log.info("deliverCallback:messageBody:{}, DeliveryTag={}", messageBody, message.getMessageProperties().getDeliveryTag());
+    @Override
+    public void receiveMessage(Message message) {
+        log.info("正在消费message={}", new String(message.getBody()));
         try {
-            OrderMessageDTO orderMessageDTO = objectMapper.readValue(messageBody,
+            OrderMessageDTO orderMessageDTO = objectMapper.readValue(message.getBody(),
                     OrderMessageDTO.class);
             OrderDetailPO orderPO = orderDetailDao.selectOrder(orderMessageDTO.getOrderId());
             switch (orderPO.getStatus()) {
@@ -63,9 +57,7 @@ public class OrderMessageService {
                         orderPO.setStatus(OrderStatus.RESTAURANT_CONFIRMED);
                         orderPO.setPrice(orderMessageDTO.getPrice());
                         orderDetailDao.update(orderPO);
-                        rabbitTemplate.send(deliverymanExchange, deliverymanKey,
-                                new Message(objectMapper.writeValueAsBytes(orderMessageDTO), new MessageProperties()),
-                                new CorrelationData(orderMessageDTO.getOrderId() + ""));
+                        transactionMsgSender.send(deliverymanExchange, deliverymanKey, orderMessageDTO);
                         log.info("消息在order-service服务已经处理完成，状态从ORDER_CREATING变为RESTAURANT_CONFIRMED，即将发送到deliveryman-queue中由deliveryman-service进行处理");
                     } else {
                         orderPO.setStatus(OrderStatus.FAILED);
@@ -78,9 +70,7 @@ public class OrderMessageService {
                         orderPO.setStatus(OrderStatus.DELIVERYMAN_CONFIRMED);
                         orderPO.setDeliverymanId(orderMessageDTO.getDeliverymanId());
                         orderDetailDao.update(orderPO);
-                        rabbitTemplate.send(settlementExchange, settlementKey,
-                                new Message(objectMapper.writeValueAsBytes(orderMessageDTO), new MessageProperties()),
-                                new CorrelationData(orderMessageDTO.getOrderId() + ""));
+                        transactionMsgSender.send(settlementExchange, settlementKey, orderMessageDTO);
                         log.info("消息在order-service服务消费完成，状态从RESTAURANT_CONFIRMED变为DELIVERYMAN_CONFIRMED，即将发送到settlement-queue中由settlement-service进行处理");
                     } else {
                         orderPO.setStatus(OrderStatus.FAILED);
@@ -94,9 +84,7 @@ public class OrderMessageService {
                         orderPO.setStatus(OrderStatus.SETTLEMENT_CONFIRMED);
                         orderPO.setSettlementId(orderMessageDTO.getSettlementId());
                         orderDetailDao.update(orderPO);
-                        rabbitTemplate.send(rewardExchange, rewardKey,
-                                new Message(objectMapper.writeValueAsBytes(orderMessageDTO), new MessageProperties()),
-                                new CorrelationData(orderMessageDTO.getOrderId() + ""));
+                        transactionMsgSender.send(rewardExchange, rewardKey, orderMessageDTO);
                         log.info("消息在order-service服务消费完成，状态从DELIVERYMAN_CONFIRMED变为SETTLEMENT_CONFIRMED，即将发送到reward-queue中由reward-service进行处理");
                     } else {
                         orderPO.setStatus(OrderStatus.FAILED);
@@ -114,14 +102,9 @@ public class OrderMessageService {
                     orderDetailDao.update(orderPO);
                     break;
             }
-            channel.basicAck(message.getMessageProperties().getDeliveryTag(), false);
         } catch (IOException e) {
-            log.error("消息deliveryTag={},消息内容={}，消费失败", message.getMessageProperties().getDeliveryTag(),
-                    messageBody);
-            log.error("", e);
-            // TODO
-            // channel.basicNack(message.getMessageProperties().getDeliveryTag(), false, true);
+            log.error(e.getMessage(), e);
+            throw new RuntimeException();
         }
     }
-
 }

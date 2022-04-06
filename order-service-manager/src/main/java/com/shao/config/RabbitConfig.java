@@ -1,8 +1,10 @@
 package com.shao.config;
 
-import com.sun.org.apache.xalan.internal.xsltc.dom.SimpleResultTreeImpl;
+import com.shao.mq.OrderMessageService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.*;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -81,4 +83,17 @@ public class RabbitConfig {
         return new Binding(orderQueue, Binding.DestinationType.QUEUE, rewardExchange, orderKey, null);
     }
 
+    // 设置队列消息监听消费绑定
+    @Bean
+    public SimpleMessageListenerContainer simpleMessageListenerContainer(ConnectionFactory connectionFactory, OrderMessageService orderMessageService) {
+        final SimpleMessageListenerContainer container = new SimpleMessageListenerContainer();
+        container.setQueueNames("queue.order");
+        container.setExposeListenerChannel(true);
+        container.setAcknowledgeMode(AcknowledgeMode.MANUAL);
+        container.setMessageListener(orderMessageService);
+        container.setConcurrentConsumers(1);
+        container.setMaxConcurrentConsumers(10);
+        container.setConnectionFactory(connectionFactory);
+        return container;
+    }
 }

@@ -1,21 +1,16 @@
 package com.shao.mq;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.rabbitmq.client.Channel;
 import com.shao.dto.OrderMessageDTO;
 import com.shao.enummeration.SettlementStatus;
+import com.shao.listener.AbstractMessageListener;
 import com.shao.mapper.SettlementMapper;
 import com.shao.po.SettlementPO;
+import com.shao.sender.TransactionMsgSender;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.tomcat.util.security.MD5Encoder;
 import org.springframework.amqp.core.Message;
-import org.springframework.amqp.core.MessageProperties;
-import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.rabbit.support.CorrelationData;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -29,12 +24,12 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 @Component
 @Slf4j
-public class SettlementExecuteMsg {
+public class SettlementExecuteMsg extends AbstractMessageListener {
     @Autowired
     private SettlementMapper settlementMapper;
 
     @Autowired
-    private RabbitTemplate rabbitTemplate;
+    private TransactionMsgSender transactionMsgSender;
 
     @Value("${rabbitmq.settlement.exchange}")
     private String settlementExchange;
@@ -42,10 +37,9 @@ public class SettlementExecuteMsg {
     @Value("${rabbitmq.order.key}")
     private String orderKey;
 
-    @RabbitListener(queues = {"queue.settlement"})
-    public void ConsumeSettlementMsg(Channel channel, @Payload Message message) {
-        final String messageBody = new String(message.getBody());
-        log.info("settlement-service服务正在消费消息={}", messageBody);
+    @Override
+    public void receiveMessage(Message message) {
+        log.info("settlement-service服务正在消费消息={}", new String(message.getBody()));
         try {
             final ObjectMapper objectMapper = new ObjectMapper();
             final OrderMessageDTO orderMessageDTO = objectMapper.readValue(message.getBody(), OrderMessageDTO.class);
@@ -59,12 +53,10 @@ public class SettlementExecuteMsg {
             settlementMapper.insert(settlementPO);
             orderMessageDTO.setSettlementId(settlementPO.getId());
             log.info("settlement-service处理完成消息，准备发送到order-queue队列中，消息内容:{}", orderMessageDTO);
-            rabbitTemplate.send(settlementExchange, orderKey, new Message(objectMapper.writeValueAsBytes(orderMessageDTO),
-                    new MessageProperties()), new CorrelationData(orderMessageDTO.getOrderId() + ""));
-            channel.basicAck(message.getMessageProperties().getDeliveryTag(), false);
+            transactionMsgSender.send(settlementExchange, orderKey, orderMessageDTO);
         } catch (IOException e) {
             log.error("", e);
-            // channel.basicNack(message.getMessageProperties().getDeliveryTag(), false, true);
+            throw new RuntimeException();
         }
     }
 }
